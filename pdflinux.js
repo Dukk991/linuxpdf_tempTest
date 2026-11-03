@@ -5,6 +5,21 @@ var req_handle = 0;
 var timeout_callbacks = {};
 var line_buffer = "";
 
+//networking test
+var net_packet_count = 0;
+var net_state = {
+  recv_packet: function(packet) {
+    net_packet_count++;
+
+    if (net_packet_count <= 10) {
+      print_msg(
+        "NET RX " + net_packet_count +
+        ": " + packet.length + " bytes"
+      );
+    }
+  }
+};
+
 var graphic_display = {
   width: 320, 
   height: 200, 
@@ -40,6 +55,26 @@ function set_interval(callback, interval) {
   app.setInterval(safe_script(`set_interval_callback(${id})`), interval);
 }
 
+var previous_console_rows = {}
+
+function print_msg(msg) {
+  lines.push("" + msg);
+
+  if (lines.length > 25)
+    lines.shift();
+
+  for (var i = 0; i < lines.length; i++) {
+    var row = lines[i];
+    var field_name = "console_" + (25 - i - 1);
+
+    if (previous_console_rows[field_name] !== row) {
+      globalThis.getField(field_name).value = row;
+      previous_console_rows[field_name] = row;
+    }
+  }
+}
+
+/*
 function print_msg(msg) {
   lines.push(""+msg);
   if (lines.length > 25) 
@@ -50,6 +85,7 @@ function print_msg(msg) {
     globalThis.getField("console_"+(25-i-1)).value = row;
   }
 }
+  */
 
 Module.print = function(msg) {
   let max_len = 40;
@@ -96,10 +132,11 @@ function start_machine_interval(m_ptr) {
   set_interval(() => {machine_tick(m_ptr)}, 1)
 }
 
+var previous_framebuffer_rows = {};
 function update_framebuffer(width, height, data, start_y, updated_height) {
   for (let y=start_y; y < start_y + updated_height; y++) {
     let row = Array(width);
-    let old_row = row.join("");
+    //let old_row = row.join("");
     for (let x=0; x < width; x++) {
       let index = (y * width + x) * 4;
       let r = data[index];
@@ -122,9 +159,15 @@ function update_framebuffer(width, height, data, start_y, updated_height) {
       else
         row[x] = "#";
     }
+    let field_name = "field_" + (height - y - 1);
     let row_str = row.join("");
-    if (row_str !== old_row)
-      globalThis.getField("field_"+(height-y-1)).value = row_str;
+
+    if (previous_framebuffer_rows[field_name] !== row_str) {
+      globalThis.getField(field_name).value = row_str;
+      previous_framebuffer_rows[field_name] = row_str;
+    }
+    //if (row_str !== old_row)
+      //globalThis.getField("field_"+(height-y-1)).value = row_str;
   }
 }
 
