@@ -6,7 +6,10 @@ var timeout_callbacks = {};
 var line_buffer = "";
 
 //networking test
+
+// Networking test: simulated ARP responder
 var net_packet_count = 0;
+
 var net_state = {
   recv_packet: function(packet) {
     net_packet_count++;
@@ -16,6 +19,67 @@ var net_state = {
         "NET RX " + net_packet_count +
         ": " + packet.length + " bytes"
       );
+    }
+
+    // Ethernet header (14 bytes) + ARP message (28 bytes)
+    if (packet.length < 42) return;
+
+    // Check EtherType: ARP (0x0806)
+    if (packet[12] !== 0x08 || packet[13] !== 0x06) return;
+
+    // Check ARP operation: request (1)
+    if (packet[20] !== 0x00 || packet[21] !== 0x01) return;
+
+    // Only respond to requests for 192.168.77.1
+    if (
+      packet[38] !== 192 ||
+      packet[39] !== 168 ||
+      packet[40] !== 77 ||
+      packet[41] !== 1
+    ) return;
+
+    // MAC address of our simulated network peer
+    var gateway_mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
+
+    // Construct a 42-byte Ethernet ARP reply
+    var reply = new Uint8Array(42);
+
+    // Ethernet header
+    reply.set(packet.subarray(6, 12), 0);
+    reply.set(gateway_mac, 6);
+    reply[12] = 0x08;
+    reply[13] = 0x06;
+
+    // ARP header
+    reply.set(packet.subarray(14, 20), 14);
+
+    // ARP operation: reply (2)
+    reply[20] = 0x00;
+    reply[21] = 0x02;
+
+    // Sender: simulated gateway
+    reply.set(gateway_mac, 22);
+    reply.set([192, 168, 77, 1], 28);
+
+    // Target: original Linux sender
+    reply.set(packet.subarray(22, 28), 32);
+    reply.set(packet.subarray(28, 32), 38);
+
+    print_msg("NET: sending ARP reply");
+
+    // Inject the ARP reply into TinyEMU
+    if (typeof _net_write_packet === "function") {
+      var ptr = Module._malloc(reply.length);
+
+      try {
+        Module.HEAPU8.set(reply, ptr);
+        _net_write_packet(ptr, reply.length);
+        print_msg("NET: ARP reply injected");
+      } finally {
+        Module._free(ptr);
+      }
+    } else {
+      print_msg("NET: _net_write_packet unavailable");
     }
   }
 };
